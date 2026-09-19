@@ -1,0 +1,7 @@
+{
+  "name": "Quranic Roots & Morphological Concordance",
+  "description": "Comprehensive Quranic Arabic root dictionary, morphological concordance, and the complete 5,155 Quran words frequency list from Fluent Arabic, categorized by parts of speech and grouped semantically with audio and translations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
