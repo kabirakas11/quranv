@@ -12,27 +12,33 @@ import { localVocabStore } from './utils/localVocabStore.ts';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'roots' | 'frequency' | 'semantic' | 'grammar' | 'pos'>('frequency');
-  const [roots, setRoots] = useState<RootSummary[]>([]);
-  const [letters, setLetters] = useState<LetterStat[]>([]);
+  const [roots, setRoots] = useState<RootSummary[]>(() => localVocabStore.getRoots('all', ''));
+  const [letters, setLetters] = useState<LetterStat[]>(() => localVocabStore.getLetters());
   const [selectedLetter, setSelectedLetter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedRootCode, setSelectedRootCode] = useState<string>('ktb');
-  const [rootDetail, setRootDetail] = useState<RootDetail | null>(null);
-  const [loadingRoots, setLoadingRoots] = useState<boolean>(true);
+  const [rootDetail, setRootDetail] = useState<RootDetail | null>(() => localVocabStore.getRootDetail('ktb'));
+  const [loadingRoots, setLoadingRoots] = useState<boolean>(false);
   const [loadingDetail, setLoadingDetail] = useState<boolean>(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [mobileView, setMobileView] = useState<'list' | 'detail'>('detail');
 
-  // Load letters list once
+  // Load letters list once, fallback to local compute
   useEffect(() => {
     fetch('/api/letters')
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
       .then((data) => {
-        if (Array.isArray(data)) {
+        if (Array.isArray(data) && data.length > 0) {
           setLetters(data);
         }
       })
-      .catch((err) => console.error('Failed to load letters:', err));
+      .catch(() => {
+        // Fallback silently to pre-bundled letter stats
+        setLetters(localVocabStore.getLetters());
+      });
   }, []);
 
   // Fetch roots with letter filter & search
@@ -54,9 +60,10 @@ export default function App() {
       const res = await fetch(`/api/roots?${params.toString()}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setRoots(data.roots || []);
-    } catch (err) {
-      console.error('Failed to fetch roots:', err);
+      setRoots(data.roots || localRoots);
+    } catch {
+      // Offline fallback: use local roots
+      setRoots(localRoots);
     } finally {
       setLoadingRoots(false);
     }
@@ -73,6 +80,7 @@ export default function App() {
       if (localRoots.length > 0) {
         setRoots(localRoots);
       }
+      setLetters(localVocabStore.getLetters());
     });
     return unsubscribe;
   }, [selectedLetter, searchQuery]);
@@ -84,14 +92,18 @@ export default function App() {
     try {
       const res = await fetch(`/api/root/${encodeURIComponent(code)}`);
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP ${res.status}`);
+        throw new Error(`HTTP ${res.status}`);
       }
       const data: RootDetail = await res.json();
       setRootDetail(data);
-    } catch (err: any) {
-      console.error('Failed to fetch root details for', code, err);
-      setDetailError(err.message || 'Failed to fetch root details');
+    } catch {
+      // Offline fallback: synthesize root detail with matching vocabulary words
+      const offlineDetail = localVocabStore.getRootDetail(code);
+      if (offlineDetail) {
+        setRootDetail(offlineDetail);
+      } else {
+        setDetailError('Unable to load root details');
+      }
     } finally {
       setLoadingDetail(false);
     }

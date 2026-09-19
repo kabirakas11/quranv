@@ -1,9 +1,10 @@
-import type { FluentQuranWord, FluentFrequencyStats, RootSummary, RootDerivation, PartOfSpeechSummary } from '../types.ts';
+import type { FluentQuranWord, FluentFrequencyStats, RootSummary, RootDerivation, PartOfSpeechSummary, RootDetail } from '../types.ts';
 import { GRAMMAR_TYPES, CURATED_GRAMMAR_DERIVATIONS } from '../data/grammarTypes.ts';
 import { PARTS_OF_SPEECH, normalizePartOfSpeechId, getWordsForPartOfSpeech } from '../data/partsOfSpeech.ts';
 import { QURAN_PARTICLES } from '../data/quranParticles.ts';
 import { SEMANTIC_DOMAINS } from '../data/semanticDomains.ts';
 import allRootsData from '../data/allRoots.json';
+import { computeLetterStats, PROMINENT_ROOTS, type LetterStat } from '../data/arabicLetters.ts';
 
 // IndexedDB configuration
 const DB_NAME = 'QuranLexiconLocalDB_v1';
@@ -175,38 +176,59 @@ class LocalVocabStore {
       this.syncProgress = 30;
       this.notify();
 
-      const [wordsRes, statsRes] = await Promise.all([
-        fetch('/api/vocab/download').catch(() => fetch('/api/fluent-words?limit=-1')),
-        fetch('/api/fluent-words/stats')
-      ]);
-
-      this.syncProgress = 60;
-      this.notify();
-
-      if (!wordsRes.ok) {
-        throw new Error(`Failed to fetch vocabulary: HTTP ${wordsRes.status}`);
-      }
-
-      const wordsData = await wordsRes.json();
-      const rawWords: FluentQuranWord[] = wordsData.words || wordsData.fluentWords || (Array.isArray(wordsData) ? wordsData : []);
-
+      let rawWords: FluentQuranWord[] = [];
       let statsData: FluentFrequencyStats | null = null;
-      if (statsRes.ok) {
-        statsData = await statsRes.json();
+
+      // 1. First attempt the dynamic API endpoint (if running on Node.js/Express)
+      try {
+        const wordsRes = await fetch('/api/vocab/download').catch(() => null);
+        if (wordsRes && wordsRes.ok) {
+          const wordsData = await wordsRes.json();
+          rawWords = wordsData.words || wordsData.fluentWords || (Array.isArray(wordsData) ? wordsData : []);
+          statsData = wordsData.stats || null;
+        }
+      } catch (e) {
+        // API not available, will fallback to static CDN
       }
+
+      // 2. If API was not available (e.g. deployed on Vercel static or CDN), load static data files
+      if (!rawWords || rawWords.length === 0) {
+        try {
+          const [fwRes, fsRes] = await Promise.all([
+            fetch('/data/fluentArabicWords.json').catch(() => null),
+            fetch('/data/fluentArabicStats.json').catch(() => null)
+          ]);
+
+          if (fwRes && fwRes.ok) {
+            const staticWords = await fwRes.json();
+            if (Array.isArray(staticWords)) {
+              rawWords = staticWords;
+            }
+          }
+
+          if (fsRes && fsRes.ok) {
+            statsData = await fsRes.json();
+          }
+        } catch (staticErr) {
+          console.warn('Failed to load static JSON files:', staticErr);
+        }
+      }
+
+      this.syncProgress = 75;
+      this.notify();
 
       if (rawWords.length > 0) {
         this.fluentWords = rawWords;
-        this.fluentStats = statsData;
+        this.fluentStats = statsData || this.getLocalStats();
         this.isLoadedInMemory = true;
 
-        this.syncProgress = 85;
+        this.syncProgress = 90;
         this.notify();
 
         // Save persistently into browser IndexedDB
         await this.idbSet('fluent_words', rawWords);
-        if (statsData) {
-          await this.idbSet('fluent_stats', statsData);
+        if (this.fluentStats) {
+          await this.idbSet('fluent_stats', this.fluentStats);
         }
         await this.idbSet('cache_meta', {
           timestamp: Date.now(),
@@ -389,6 +411,130 @@ class LocalVocabStore {
     }
 
     return filtered;
+  }
+
+  // Get 28 Arabic letters with root counts locally
+  public getLetters(): LetterStat[] {
+    return computeLetterStats(this.roots);
+  }
+
+  // Synthesize or retrieve root detail offline
+  public getRootDetail(code: string): RootDetail {
+    const cleanCode = code.replace(/%24/g, '$').replace(/%2A/g, '*').replace(/%3C/g, '<').replace(/%3E/g, '>');
+    const rootSummary = this.roots.find((r) => r.code === code || r.code === cleanCode);
+    const prominent = PROMINENT_ROOTS[cleanCode] || PROMINENT_ROOTS[code];
+
+    // Find any words in the vocabulary matching this root
+    const rootLetters = (rootSummary?.cleanArabic || rootSummary?.arabic || '').replace(/[\s\u064B-\u065F]/g, '');
+    const matchingWords = this.fluentWords.filter((w) => {
+      if (w.word && rootLetters.length >= 2) {
+        const cleanW = (w.cleanArabic || w.word).replace(/[\s\u064B-\u065F]/g, '');
+        let lastIdx = -1;
+        let matchedAll = true;
+        for (const char of rootLetters) {
+          const idx = cleanW.indexOf(char, lastIdx + 1);
+          if (idx === -1) {
+            matchedAll = false;
+            break;
+          }
+          lastIdx = idx;
+        }
+        return matchedAll;
+      }
+      return false;
+    });
+
+    const occurrences = prominent?.occurrences || rootSummary?.occurrences || (matchingWords.length > 0 ? matchingWords.reduce((sum, w) => sum + w.frequency, 0) : 1);
+    const translit = prominent?.translit || rootSummary?.translitName || cleanCode;
+    const meaning = prominent?.meaning || rootSummary?.primaryGloss || 'Quranic root';
+
+    const variations = matchingWords.slice(0, 50).map((w, idx) => {
+      const locParts = (w.sampleVerse?.location || '1:1').split(':');
+      const chapter = parseInt(locParts[0], 10) || 1;
+      const verse = parseInt(locParts[1], 10) || 1;
+      return {
+        location: w.sampleVerse ? `${chapter}:${verse}:${w.rank || idx + 1}` : `1:1:${idx + 1}`,
+        chapter,
+        verse,
+        wordNumber: idx + 1,
+        transliteration: w.transliteration,
+        translation: w.meaning,
+        targetWord: w.word,
+        ayahText: w.sampleVerse?.text || w.word,
+        grammarCategory: w.pos
+      };
+    });
+
+    const sections = [
+      {
+        heading: `Quranic Vocabulary Variations (${matchingWords.length})`,
+        count: matchingWords.length,
+        variations
+      }
+    ];
+
+    return {
+      code,
+      arabicRoot: rootSummary?.arabic || cleanCode,
+      rootTranslit: translit,
+      occurrences,
+      formsCountDesc: `${matchingWords.length} vocabulary forms identified`,
+      derivedForms: [],
+      derivations: [],
+      sections,
+      totalWordVariations: matchingWords.length,
+      sourceUrl: `https://corpus.quran.com/qurandic.jsp?root=${encodeURIComponent(code)}`
+    };
+  }
+
+  // Get local part of speech groups
+  public getLocalPosGroups(): any[] {
+    const map = new Map<string, any>();
+    for (const w of this.fluentWords) {
+      const pos = w.pos || 'Other';
+      if (!map.has(pos)) {
+        map.set(pos, {
+          pos,
+          posArabic: w.posArabic || '',
+          totalWords: 0,
+          totalOccurrences: 0,
+          topWords: []
+        });
+      }
+      const grp = map.get(pos)!;
+      grp.totalWords += 1;
+      grp.totalOccurrences += (w.frequency || 1);
+      if (grp.topWords.length < 15) {
+        grp.topWords.push(w);
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => b.totalOccurrences - a.totalOccurrences);
+  }
+
+  // Get local semantic groups
+  public getLocalSemanticGroups(): any[] {
+    if (this.fluentStats && (this.fluentStats as any).semanticDomains) {
+      return (this.fluentStats as any).semanticDomains;
+    }
+    const map = new Map<string, any>();
+    for (const w of this.fluentWords) {
+      const domain = w.semanticDomain || 'General Vocabulary';
+      if (!map.has(domain)) {
+        map.set(domain, {
+          domain,
+          totalWords: 0,
+          totalOccurrences: 0,
+          topWords: []
+        });
+      }
+      const grp = map.get(domain)!;
+      grp.totalWords += 1;
+      grp.totalOccurrences += (w.frequency || 1);
+      if (grp.topWords.length < 15) {
+        grp.topWords.push(w);
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => b.totalOccurrences - a.totalOccurrences);
   }
 
   // Get parts of speech derivations locally

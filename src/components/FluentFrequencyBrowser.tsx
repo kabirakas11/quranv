@@ -191,10 +191,21 @@ export const FluentFrequencyBrowser: React.FC<FluentFrequencyBrowserProps> = ({
           setStats(data);
         }
       })
-      .catch((err) => {
-        console.warn('API /api/fluent-words/stats unavailable, using local stats:', err);
-        const fallback = localVocabStore.getLocalStats();
-        if (fallback) setStats(fallback);
+      .catch(() => {
+        // Try static JSON fallback (for Vercel or CDN static hosts)
+        fetch('/data/fluentArabicStats.json')
+          .then((r) => r.ok ? r.json() : null)
+          .then((staticStats) => {
+            if (staticStats) setStats(staticStats);
+            else {
+              const fallback = localVocabStore.getLocalStats();
+              if (fallback) setStats(fallback);
+            }
+          })
+          .catch(() => {
+            const fallback = localVocabStore.getLocalStats();
+            if (fallback) setStats(fallback);
+          });
       });
 
     Promise.all([
@@ -202,10 +213,15 @@ export const FluentFrequencyBrowser: React.FC<FluentFrequencyBrowserProps> = ({
       fetch('/api/fluent-words/by-semantic').then((r) => r.ok ? r.json() : { domains: [] }).catch(() => ({ domains: [] }))
     ])
       .then(([posData, semData]) => {
-        if (posData?.groups?.length) setPosGroups(posData.groups);
-        if (semData?.domains?.length) setSemanticGroups(semData.domains);
+        const pGroups = posData?.groups?.length ? posData.groups : localVocabStore.getLocalPosGroups();
+        const sGroups = semData?.domains?.length ? semData.domains : localVocabStore.getLocalSemanticGroups();
+        if (pGroups.length) setPosGroups(pGroups);
+        if (sGroups.length) setSemanticGroups(sGroups);
       })
-      .catch((err) => console.warn('Error loading grouped lists:', err))
+      .catch(() => {
+        setPosGroups(localVocabStore.getLocalPosGroups());
+        setSemanticGroups(localVocabStore.getLocalSemanticGroups());
+      })
       .finally(() => setLoadingGroups(false));
 
     // 3. Subscribe to local store updates

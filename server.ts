@@ -27,10 +27,12 @@ const appDir = getAppDir();
 
 function findDataFile(filename: string): string | null {
   const possiblePaths = [
+    path.join(process.cwd(), 'public/data', filename),
     path.join(process.cwd(), 'src/data', filename),
     path.join(appDir, 'src/data', filename),
     path.join(appDir, '../src/data', filename),
     path.join(appDir, filename),
+    path.join(process.cwd(), 'dist/src/data', filename),
     path.join(process.cwd(), filename)
   ];
   for (const p of possiblePaths) {
@@ -1236,6 +1238,11 @@ async function start() {
   });
 }
 
-start().catch((err) => {
-  console.error('Failed to start server:', err);
-});
+if (!process.env.VERCEL) {
+  start().catch((err) => {
+    console.error('Failed to start server:', err);
+  });
+}
+
+export default app;
+export { app };
