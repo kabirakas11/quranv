@@ -44,8 +44,11 @@ import {
   Footprints,
   Trees,
   Mountain,
-  Smile
+  Smile,
+  HardDrive
 } from 'lucide-react';
+import { localVocabStore } from '../utils/localVocabStore.ts';
+import { LocalVocabManagerModal } from './LocalVocabManagerModal.tsx';
 
 interface FluentFrequencyBrowserProps {
   onSelectRoot?: (rootCode: string) => void;
@@ -167,9 +170,17 @@ export const FluentFrequencyBrowser: React.FC<FluentFrequencyBrowserProps> = ({
 
   // Active playing audio word
   const [playingWord, setPlayingWord] = useState<string | null>(null);
+  const [isVocabModalOpen, setIsVocabModalOpen] = useState(false);
 
-  // Load stats and group overviews on mount
+  // Load stats and subscribe to localVocabStore
   useEffect(() => {
+    // 1. Instantly read local stats from memory
+    const localStats = localVocabStore.getLocalStats();
+    if (localStats) {
+      setStats(localStats);
+    }
+
+    // 2. Fetch server stats/groups in background or as fallback
     fetch('/api/fluent-words/stats')
       .then((res) => res.json())
       .then((data) => setStats(data))
@@ -185,10 +196,44 @@ export const FluentFrequencyBrowser: React.FC<FluentFrequencyBrowserProps> = ({
       })
       .catch((err) => console.error('Error loading grouped lists:', err))
       .finally(() => setLoadingGroups(false));
+
+    // 3. Subscribe to local store updates
+    const unsubscribe = localVocabStore.subscribe(() => {
+      fetchWords();
+    });
+
+    return unsubscribe;
   }, []);
 
-  // Fetch words for table or active filters
+  // Fetch words locally or via API with zero latency
   const fetchWords = useCallback(async () => {
+    const storeStatus = localVocabStore.getStatus();
+
+    // If local vocab is loaded in memory, query in <1ms without any API call!
+    if (storeStatus.isReady) {
+      const result = localVocabStore.queryFluentWords({
+        q: searchQuery.trim(),
+        primaryDivision: selectedDivision,
+        pos: selectedPos,
+        posCategory: selectedPosCategory,
+        semanticDomain: selectedDomain,
+        semanticCluster: selectedCluster,
+        maxRank: selectedMilestone !== 'all' ? Number(selectedMilestone) : undefined,
+        sort: sortField,
+        direction: sortDirection as 'asc' | 'desc',
+        page,
+        limit: 50
+      });
+
+      setWords(result.words);
+      setTotalCount(result.totalCount);
+      setTotalOccurrences(result.totalOccurrences);
+      setTotalPages(result.totalPages);
+      setLoadingWords(false);
+      return;
+    }
+
+    // Fallback while local cache initializes
     setLoadingWords(true);
     try {
       const params = new URLSearchParams();
@@ -244,9 +289,62 @@ export const FluentFrequencyBrowser: React.FC<FluentFrequencyBrowserProps> = ({
     window.speechSynthesis.speak(utterance);
   };
 
-  // CSV Export
+  // CSV Export - Instant local generation
   const handleExportCsv = async () => {
     try {
+      const storeStatus = localVocabStore.getStatus();
+      if (storeStatus.isReady) {
+        // If all filters are default, export the entire database directly!
+        if (
+          !searchQuery.trim() &&
+          selectedDivision === 'all' &&
+          selectedPos === 'all' &&
+          selectedDomain === 'all' &&
+          selectedMilestone === 'all'
+        ) {
+          localVocabStore.exportVocabCsv();
+          return;
+        }
+
+        // Otherwise export filtered results locally in 0ms!
+        const result = localVocabStore.queryFluentWords({
+          q: searchQuery.trim(),
+          primaryDivision: selectedDivision,
+          pos: selectedPos,
+          semanticDomain: selectedDomain,
+          maxRank: selectedMilestone !== 'all' ? Number(selectedMilestone) : undefined,
+          limit: -1
+        });
+
+        const exportList = result.words;
+        const headers = ['Rank', 'Word (Arabic)', 'Transliteration', 'Meaning', 'Part of Speech', 'POS Arabic', 'Semantic Domain', 'Frequency', 'Cumulative %'];
+        const csvRows = [headers.join(',')];
+
+        for (const w of exportList) {
+          csvRows.push([
+            w.rank,
+            `"${w.word}"`,
+            `"${w.transliteration.replace(/"/g, '""')}"`,
+            `"${w.meaning.replace(/"/g, '""')}"`,
+            `"${w.pos}"`,
+            `"${w.posArabic}"`,
+            `"${w.semanticDomainName || ''}"`,
+            w.frequency,
+            `${w.percentage}%`
+          ].join(','));
+        }
+
+        const blob = new Blob(['\uFEFF' + csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', `quran_frequency_words_${Date.now()}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        return;
+      }
+
       const params = new URLSearchParams();
       if (searchQuery.trim()) params.append('q', searchQuery.trim());
       if (selectedDivision !== 'all') params.append('primaryDivision', selectedDivision);
@@ -503,6 +601,17 @@ export const FluentFrequencyBrowser: React.FC<FluentFrequencyBrowserProps> = ({
           >
             <Download className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Export CSV</span>
+          </button>
+
+          {/* Local Vocab Storage Status & Download Manager */}
+          <button
+            type="button"
+            onClick={() => setIsVocabModalOpen(true)}
+            title="Locally stored vocabulary (instant zero-latency loads, offline storage & exports)"
+            className="px-3.5 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-300/80 dark:border-emerald-700/60 text-emerald-800 dark:text-emerald-300 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
+          >
+            <HardDrive className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+            <span className="hidden sm:inline">Local Storage</span>
           </button>
         </div>
       </div>
@@ -1671,6 +1780,12 @@ export const FluentFrequencyBrowser: React.FC<FluentFrequencyBrowserProps> = ({
           </div>
         </div>
       )}
+
+      {/* Local Storage & Vocab Download Modal */}
+      <LocalVocabManagerModal
+        isOpen={isVocabModalOpen}
+        onClose={() => setIsVocabModalOpen(false)}
+      />
     </div>
   );
 };

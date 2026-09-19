@@ -19,6 +19,7 @@ import {
   FileText
 } from 'lucide-react';
 import { PARTS_OF_SPEECH, PRIMARY_DIVISIONS, normalizePartOfSpeechId, QURAN_PARTICLES, type QuranParticle } from '../data/partsOfSpeech.ts';
+import { localVocabStore } from '../utils/localVocabStore.ts';
 
 interface PartsOfSpeechWordsTableProps {
   partOfSpeech: string;                        // e.g. "noun", "verb", "verb-form-i", "Active Participle"
@@ -88,10 +89,19 @@ export const PartsOfSpeechWordsTable: React.FC<PartsOfSpeechWordsTableProps> = (
     };
   }, [normalizedId, partOfSpeech]);
 
-  // Fetch words from server API when in "all" scope or if propWords not supplied
+  // Load words instantly from local store if available, or fetch from server API
   React.useEffect(() => {
     let isMounted = true;
     if (scope === 'all' || !propWords) {
+      // 1. Try localVocabStore for instantaneous 0ms display
+      const localRes = localVocabStore.getLocalPosWords(normalizedId);
+      if (localRes.derivations && localRes.derivations.length > 0) {
+        setGlobalWords(localRes.derivations);
+        setIsLoadingGlobal(false);
+        return;
+      }
+
+      // 2. Fallback to API if not yet in memory
       setIsLoadingGlobal(true);
       fetch(`/api/pos-words?pos=${encodeURIComponent(normalizedId)}`)
         .then((res) => res.json())

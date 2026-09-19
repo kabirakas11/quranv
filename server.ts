@@ -1,4 +1,5 @@
 import express, { Request, Response } from 'express';
+import compression from 'compression';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
@@ -15,6 +16,7 @@ const __dirname = path.dirname(__filename);
 
 const PORT = 3000;
 const app = express();
+app.use(compression());
 app.use(express.json());
 
 // In-memory cache for fast subsequent lookups
@@ -871,6 +873,19 @@ app.get('/api/fluent-words/stats', (req: Request, res: Response) => {
     milestones,
     source: 'Fluent Arabic Quran Frequency List & Corpus Quran Morphology',
     sourceSpreadsheet: 'Quran-All-Words.xlsx'
+  });
+});
+
+// GET /api/vocab/download - Complete vocabulary bundle for client-side local caching & offline storage
+app.get(['/api/vocab/download', '/api/vocab/bundle'], (req: Request, res: Response) => {
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.json({
+    words: fluentWordsList,
+    stats: fluentStatsData,
+    totalWords: fluentWordsList.length,
+    rootsCount: allRootsList.length,
+    version: '1.0.0',
+    exportedAt: new Date().toISOString()
   });
 });
 

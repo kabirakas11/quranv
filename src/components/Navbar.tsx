@@ -1,5 +1,7 @@
-import React from 'react';
-import { Search, BookOpen, Sparkles, ExternalLink, RefreshCw, Layers, Compass } from 'lucide-react';
+import React, { useState } from 'react';
+import { Search, BookOpen, Sparkles, ExternalLink, RefreshCw, Layers, Compass, HardDrive, Download } from 'lucide-react';
+import { useLocalVocab } from '../utils/useLocalVocab.ts';
+import { LocalVocabManagerModal } from './LocalVocabManagerModal.tsx';
 
 interface NavbarProps {
   searchQuery: string;
@@ -22,6 +24,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
   onTabChange
 }) => {
+  const [isVocabModalOpen, setIsVocabModalOpen] = useState(false);
+  const { isStoredInIndexedDB, isReady, wordsCount } = useLocalVocab();
+
   const quickRoots = [
     { code: 'ktb', label: 'ك ت ب (Write)' },
     { code: 'rHm', label: 'ر ح م (Mercy)' },
@@ -141,11 +146,29 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             </div>
 
+            {/* Local Storage & Download Button */}
+            <button
+              type="button"
+              onClick={() => setIsVocabModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-stone-800/90 hover:bg-stone-750 text-stone-200 border border-stone-700 hover:border-amber-500/50 transition-all shrink-0 cursor-pointer"
+              title="Locally stored vocabulary (zero API latency) and offline download"
+            >
+              <HardDrive className={`w-3.5 h-3.5 ${isStoredInIndexedDB ? 'text-emerald-400' : 'text-amber-400'}`} />
+              <span className="hidden sm:inline font-medium">Local Vocab</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                isStoredInIndexedDB
+                  ? 'bg-emerald-500/20 text-emerald-300'
+                  : 'bg-amber-500/20 text-amber-300'
+              }`}>
+                {wordsCount > 0 ? `${(wordsCount).toLocaleString()}` : '5,155'}
+              </span>
+            </button>
+
             <a
               href="https://corpus.quran.com/qurandictionary.jsp"
               target="_blank"
               rel="noopener noreferrer"
-              className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-800 hover:bg-stone-750 text-stone-300 hover:text-amber-300 border border-stone-700 hover:border-amber-500/40 transition-colors shrink-0"
+              className="hidden xl:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-800 hover:bg-stone-750 text-stone-300 hover:text-amber-300 border border-stone-700 hover:border-amber-500/40 transition-colors shrink-0"
               title="Open Official Quranic Arabic Corpus Dictionary"
             >
               <span>Corpus Source</span>
@@ -169,6 +192,12 @@ export const Navbar: React.FC<NavbarProps> = ({
           ))}
         </div>
       </div>
+
+      {/* Local Storage & Download Modal */}
+      <LocalVocabManagerModal
+        isOpen={isVocabModalOpen}
+        onClose={() => setIsVocabModalOpen(false)}
+      />
     </header>
   );
 };

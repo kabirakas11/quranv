@@ -8,6 +8,7 @@ import { SemanticBrowser } from './components/SemanticBrowser.tsx';
 import { PartsOfSpeechBrowser } from './components/PartsOfSpeechBrowser.tsx';
 import { FluentFrequencyBrowser } from './components/FluentFrequencyBrowser.tsx';
 import { Loader2, AlertCircle, BookOpen, Sparkles, RefreshCw } from 'lucide-react';
+import { localVocabStore } from './utils/localVocabStore.ts';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'roots' | 'frequency' | 'semantic' | 'grammar' | 'pos'>('frequency');
@@ -36,6 +37,14 @@ export default function App() {
 
   // Fetch roots with letter filter & search
   const fetchRoots = useCallback(async (letter: string, query: string) => {
+    // 1. Try local storage first for 0ms instant display
+    const localRoots = localVocabStore.getRoots(letter, query);
+    if (localRoots.length > 0) {
+      setRoots(localRoots);
+      setLoadingRoots(false);
+      return;
+    }
+
     setLoadingRoots(true);
     try {
       const params = new URLSearchParams();
@@ -56,6 +65,17 @@ export default function App() {
   useEffect(() => {
     fetchRoots(selectedLetter, searchQuery);
   }, [selectedLetter, searchQuery, fetchRoots]);
+
+  // Subscribe to localVocabStore to refresh roots when local storage updates
+  useEffect(() => {
+    const unsubscribe = localVocabStore.subscribe(() => {
+      const localRoots = localVocabStore.getRoots(selectedLetter, searchQuery);
+      if (localRoots.length > 0) {
+        setRoots(localRoots);
+      }
+    });
+    return unsubscribe;
+  }, [selectedLetter, searchQuery]);
 
   // Fetch single root details and all variations
   const fetchRootDetail = useCallback(async (code: string) => {
