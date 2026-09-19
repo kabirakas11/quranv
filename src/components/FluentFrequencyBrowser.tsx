@@ -711,10 +711,10 @@ export const FluentFrequencyBrowser: React.FC<FluentFrequencyBrowserProps> = ({
                         group.primaryDivision === 'verb' ? 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800' :
                         'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800'
                       }`}>
-                        {group.primaryDivision.toUpperCase()}
+                        {(group.primaryDivision || 'noun').toUpperCase()}
                       </span>
                       <h3 className="text-base font-bold text-stone-900 dark:text-stone-100 mt-1">
-                        {group.posTitle}
+                        {group.posTitle || group.pos}
                       </h3>
                     </div>
 

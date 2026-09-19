@@ -1,5 +1,4 @@
 import type { RootSummary } from '../types.ts';
-import allRootsData from './allRoots.json';
 
 export interface LetterStat {
   letterCode: string;
@@ -54,7 +53,7 @@ export const PROMINENT_ROOTS: Record<string, { occurrences: number; translit: st
 };
 
 // Compute letter statistics from a list of roots (or pre-bundled roots)
-export function computeLetterStats(rootsList: RootSummary[] = allRootsData as RootSummary[]): LetterStat[] {
+export function computeLetterStats(rootsList: RootSummary[] = []): LetterStat[] {
   return LETTERS_ORDER.map((letterCode) => {
     const matching = rootsList.filter((r) => r.letter === letterCode);
     const arabicSymbol = matching[0]?.arabicLetter || letterCode;

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <rect width="64" height="64" rx="16" fill="#064E3B"/>
+  <circle cx="32" cy="32" r="24" stroke="#D97706" stroke-width="2" stroke-dasharray="4 2" fill="none"/>
+  <!-- Open Book / Quran Leaves -->
+  <path d="M32 24C27 21 20 21 16 23V43C20 41 27 41 32 44C37 41 44 41 48 43V23C44 21 37 21 32 24Z" fill="#FDE68A" stroke="#F59E0B" stroke-width="1.5" stroke-linejoin="round"/>
+  <path d="M32 24V44" stroke="#D97706" stroke-width="1.5"/>
+  <!-- Star on top -->
+  <path d="M32 14L33.5 18L37.5 19.5L33.5 21L32 25L30.5 21L26.5 19.5L30.5 18Z" fill="#F59E0B"/>
+</svg>

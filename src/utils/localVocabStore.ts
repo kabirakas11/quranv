@@ -496,6 +496,8 @@ class LocalVocabStore {
         map.set(pos, {
           pos,
           posArabic: w.posArabic || '',
+          posTitle: w.posTitle || pos,
+          primaryDivision: w.primaryDivision || (w.posCategory === 'verb' || w.pos === 'V' ? 'verb' : (w.pos === 'P' || w.posCategory === 'particle' ? 'particle' : 'noun')),
           totalWords: 0,
           totalOccurrences: 0,
           topWords: []

@@ -1,4 +1,5 @@
-import express, { Request, Response } from 'express';
+import express from 'express';
+import type { Request, Response } from 'express';
 import compression from 'compression';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -8,10 +9,31 @@ import { SEMANTIC_DOMAINS } from '../data/semanticDomains.ts';
 import { GRAMMAR_TYPES, CURATED_GRAMMAR_DERIVATIONS, normalizeGrammarTypeId } from '../data/grammarTypes.ts';
 import { PARTS_OF_SPEECH, PRIMARY_DIVISIONS, normalizePartOfSpeechId, getWordsForPartOfSpeech, QURAN_PARTICLES } from '../data/partsOfSpeech.ts';
 import type { RootSummary, RootDetail, DerivedFormSummary, MorphologicalSection, WordVariation, RootDerivation, SemanticDomain, GrammarCategorySummary, PartOfSpeechSummary, FluentQuranWord, FluentFrequencyStats } from '../types.ts';
-import allRootsData from '../data/allRoots.json';
-import rawWordsData from '../data/fluentArabicWords.json';
-import rawStatsData from '../data/fluentArabicStats.json';
 import { PROMINENT_ROOTS } from '../data/arabicLetters.ts';
+import { createRequire } from 'module';
+
+const nodeRequire = createRequire(import.meta.url);
+
+function loadDataJson<T>(relativePath: string, fallback: T): T {
+  try {
+    return nodeRequire(relativePath) as T;
+  } catch (err1) {
+    try {
+      const fs = nodeRequire('fs');
+      const p = path.resolve(process.cwd(), relativePath.replace(/^\.\.\//, 'src/'));
+      if (fs.existsSync(p)) {
+        return JSON.parse(fs.readFileSync(p, 'utf-8')) as T;
+      }
+    } catch (err2) {
+      console.warn(`Could not load ${relativePath}:`, err1, err2);
+    }
+    return fallback;
+  }
+}
+
+const allRootsData: RootSummary[] = loadDataJson<RootSummary[]>('../data/allRoots.json', []);
+const rawWordsData: any[] = loadDataJson<any[]>('../data/fluentArabicWords.json', []);
+const rawStatsData: any = loadDataJson<any>('../data/fluentArabicStats.json', {});
 
 const PORT = 3000;
 const app = express();
