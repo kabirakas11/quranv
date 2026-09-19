@@ -10,33 +10,41 @@ import { GRAMMAR_TYPES, CURATED_GRAMMAR_DERIVATIONS, normalizeGrammarTypeId } fr
 import { PARTS_OF_SPEECH, PRIMARY_DIVISIONS, normalizePartOfSpeechId, getWordsForPartOfSpeech, QURAN_PARTICLES } from '../data/partsOfSpeech.ts';
 import type { RootSummary, RootDetail, DerivedFormSummary, MorphologicalSection, WordVariation, RootDerivation, SemanticDomain, GrammarCategorySummary, PartOfSpeechSummary, FluentQuranWord, FluentFrequencyStats } from '../types.ts';
 import { PROMINENT_ROOTS } from '../data/arabicLetters.ts';
-import { createRequire } from 'module';
+import fs from 'fs';
 
-const nodeRequire = createRequire(import.meta.url);
-
-function loadDataJson<T>(relativePath: string, fallback: T): T {
-  try {
-    return nodeRequire(relativePath) as T;
-  } catch (err1) {
+function loadDataJson<T>(filename: string, fallback: T): T {
+  const possiblePaths = [
+    path.resolve(process.cwd(), 'src/data', filename),
+    path.resolve(process.cwd(), 'dist/src/data', filename),
+    path.resolve(process.cwd(), 'data', filename),
+    fileURLToPath(new URL(`../data/${filename}`, import.meta.url))
+  ];
+  for (const p of possiblePaths) {
     try {
-      const fs = nodeRequire('fs');
-      const p = path.resolve(process.cwd(), relativePath.replace(/^\.\.\//, 'src/'));
       if (fs.existsSync(p)) {
         return JSON.parse(fs.readFileSync(p, 'utf-8')) as T;
       }
-    } catch (err2) {
-      console.warn(`Could not load ${relativePath}:`, err1, err2);
+    } catch {
+      // try next candidate path
     }
-    return fallback;
   }
+  return fallback;
 }
 
-const allRootsData: RootSummary[] = loadDataJson<RootSummary[]>('../data/allRoots.json', []);
-const rawWordsData: any[] = loadDataJson<any[]>('../data/fluentArabicWords.json', []);
-const rawStatsData: any = loadDataJson<any>('../data/fluentArabicStats.json', {});
+const allRootsData: RootSummary[] = loadDataJson<RootSummary[]>('allRoots.json', []);
+const rawWordsData: any[] = loadDataJson<any[]>('fluentArabicWords.json', []);
+const rawStatsData: any = loadDataJson<any>('fluentArabicStats.json', {});
 
 const PORT = 3000;
 const app = express();
+
+// URL prefix normalization so that both /api/letters and /letters (if stripped by reverse proxies) work seamlessly
+app.use((req, res, next) => {
+  if (req.url && !req.url.startsWith('/api') && !req.url.startsWith('/@') && !req.url.startsWith('/src') && !req.url.startsWith('/assets')) {
+    req.url = `/api${req.url.startsWith('/') ? '' : '/'}${req.url}`;
+  }
+  next();
+});
 
 // Enable CORS for universal access across Vercel deployments & previews
 app.use((req, res, next) => {
@@ -51,6 +59,15 @@ app.use((req, res, next) => {
 
 app.use(compression());
 app.use(express.json());
+
+// Base health endpoints
+app.get(['/api', '/api/health'], (req: Request, res: Response) => {
+  res.json({
+    status: 'ok',
+    totalRoots: allRootsList.length || 1664,
+    totalWords: fluentWordsList.length || 5155
+  });
+});
 
 // In-memory cache for fast subsequent lookups
 const rootCache = new Map<string, RootDetail>();

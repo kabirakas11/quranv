@@ -436,14 +436,20 @@ export const FluentFrequencyBrowser: React.FC<FluentFrequencyBrowserProps> = ({
 
   // Filtered pos groups
   const filteredPosGroups = useMemo(() => {
-    return posGroups.filter((g) => {
-      if (selectedDivision !== 'all' && g.primaryDivision !== selectedDivision) {
+    return (posGroups || []).filter((g) => {
+      if (selectedDivision !== 'all' && (g.primaryDivision || 'noun') !== selectedDivision) {
         return false;
       }
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
-        const matchesName = g.pos.toLowerCase().includes(q) || g.posArabic.includes(q) || g.posTitle.toLowerCase().includes(q);
-        const matchesWords = g.topWords.some((w) => w.word.includes(q) || w.meaning.toLowerCase().includes(q) || w.transliteration.toLowerCase().includes(q));
+        const matchesName = (g.pos || '').toLowerCase().includes(q) || 
+          (g.posArabic || '').includes(q) || 
+          (g.posTitle || '').toLowerCase().includes(q);
+        const matchesWords = (g.topWords || []).some((w) => 
+          (w.word || '').includes(q) || 
+          (w.meaning || '').toLowerCase().includes(q) || 
+          (w.transliteration || '').toLowerCase().includes(q)
+        );
         if (!matchesName && !matchesWords) return false;
       }
       return true;
@@ -452,7 +458,7 @@ export const FluentFrequencyBrowser: React.FC<FluentFrequencyBrowserProps> = ({
 
   // Filtered semantic groups
   const filteredSemanticGroups = useMemo(() => {
-    return semanticGroups.filter((g) => {
+    return (semanticGroups || []).filter((g) => {
       // Filter by selected POS Category if active
       if (selectedPosCategory !== 'all') {
         const catGroup = g.categories?.[selectedPosCategory];
@@ -462,15 +468,27 @@ export const FluentFrequencyBrowser: React.FC<FluentFrequencyBrowserProps> = ({
       }
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
-        const matchesName = g.domainName.toLowerCase().includes(q) || g.domainArabic.includes(q);
-        const matchesWords = g.topWords.some((w) => w.word.includes(q) || w.meaning.toLowerCase().includes(q) || w.transliteration.toLowerCase().includes(q));
+        const matchesName = (g.domainName || '').toLowerCase().includes(q) || (g.domainArabic || '').includes(q);
+        const matchesWords = (g.topWords || []).some((w) => 
+          (w.word || '').includes(q) || 
+          (w.meaning || '').toLowerCase().includes(q) || 
+          (w.transliteration || '').toLowerCase().includes(q)
+        );
         const matchesCategoryWords = g.categories && Object.values(g.categories).some((cat: SemanticCategoryGroup) => 
-          cat.words.some((w) => w.word.includes(q) || w.meaning.toLowerCase().includes(q) || w.transliteration.toLowerCase().includes(q))
+          (cat.words || []).some((w) => 
+            (w.word || '').includes(q) || 
+            (w.meaning || '').toLowerCase().includes(q) || 
+            (w.transliteration || '').toLowerCase().includes(q)
+          )
         );
         const matchesClusters = g.clusters && Object.values(g.clusters).some((cl: SemanticClusterGroup) =>
-          cl.clusterName.toLowerCase().includes(q) ||
-          cl.clusterArabic.includes(q) ||
-          cl.words.some((w) => w.word.includes(q) || w.meaning.toLowerCase().includes(q) || w.transliteration.toLowerCase().includes(q))
+          (cl.clusterName || '').toLowerCase().includes(q) ||
+          (cl.clusterArabic || '').includes(q) ||
+          (cl.words || []).some((w) => 
+            (w.word || '').includes(q) || 
+            (w.meaning || '').toLowerCase().includes(q) || 
+            (w.transliteration || '').toLowerCase().includes(q)
+          )
         );
         if (!matchesName && !matchesWords && !matchesCategoryWords && !matchesClusters) return false;
       }

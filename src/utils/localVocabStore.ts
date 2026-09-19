@@ -524,9 +524,14 @@ class LocalVocabStore {
       if (!map.has(domain)) {
         map.set(domain, {
           domain,
+          domainId: domain,
+          domainName: w.semanticDomainName || domain,
+          domainArabic: w.semanticDomainArabic || '',
           totalWords: 0,
           totalOccurrences: 0,
-          topWords: []
+          topWords: [],
+          categories: {},
+          clusters: {}
         });
       }
       const grp = map.get(domain)!;
