@@ -182,19 +182,30 @@ export const FluentFrequencyBrowser: React.FC<FluentFrequencyBrowserProps> = ({
 
     // 2. Fetch server stats/groups in background or as fallback
     fetch('/api/fluent-words/stats')
-      .then((res) => res.json())
-      .then((data) => setStats(data))
-      .catch((err) => console.error('Error fetching fluent stats:', err));
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((data) => {
+        if (data && typeof data === 'object') {
+          setStats(data);
+        }
+      })
+      .catch((err) => {
+        console.warn('API /api/fluent-words/stats unavailable, using local stats:', err);
+        const fallback = localVocabStore.getLocalStats();
+        if (fallback) setStats(fallback);
+      });
 
     Promise.all([
-      fetch('/api/fluent-words/by-pos').then((r) => r.json()),
-      fetch('/api/fluent-words/by-semantic').then((r) => r.json())
+      fetch('/api/fluent-words/by-pos').then((r) => r.ok ? r.json() : { groups: [] }).catch(() => ({ groups: [] })),
+      fetch('/api/fluent-words/by-semantic').then((r) => r.ok ? r.json() : { domains: [] }).catch(() => ({ domains: [] }))
     ])
       .then(([posData, semData]) => {
-        setPosGroups(posData.groups || []);
-        setSemanticGroups(semData.domains || []);
+        if (posData?.groups?.length) setPosGroups(posData.groups);
+        if (semData?.domains?.length) setSemanticGroups(semData.domains);
       })
-      .catch((err) => console.error('Error loading grouped lists:', err))
+      .catch((err) => console.warn('Error loading grouped lists:', err))
       .finally(() => setLoadingGroups(false));
 
     // 3. Subscribe to local store updates
@@ -250,13 +261,33 @@ export const FluentFrequencyBrowser: React.FC<FluentFrequencyBrowserProps> = ({
       params.append('limit', '50');
 
       const res = await fetch(`/api/fluent-words?${params.toString()}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setWords(data.words || []);
       setTotalCount(data.totalCount || 0);
       setTotalOccurrences(data.totalOccurrences || 0);
       setTotalPages(data.totalPages || 1);
     } catch (err) {
-      console.error('Error fetching words list:', err);
+      console.warn('Error fetching words list from server, trying local cache:', err);
+      const localResult = localVocabStore.queryFluentWords({
+        q: searchQuery.trim(),
+        primaryDivision: selectedDivision,
+        pos: selectedPos,
+        posCategory: selectedPosCategory,
+        semanticDomain: selectedDomain,
+        semanticCluster: selectedCluster,
+        maxRank: selectedMilestone !== 'all' ? Number(selectedMilestone) : undefined,
+        sort: sortField,
+        direction: sortDirection as 'asc' | 'desc',
+        page,
+        limit: 50
+      });
+      if (localResult.words.length > 0) {
+        setWords(localResult.words);
+        setTotalCount(localResult.totalCount);
+        setTotalOccurrences(localResult.totalOccurrences);
+        setTotalPages(localResult.totalPages);
+      }
     } finally {
       setLoadingWords(false);
     }

@@ -11,8 +11,33 @@ import { GRAMMAR_TYPES, CURATED_GRAMMAR_DERIVATIONS, normalizeGrammarTypeId } fr
 import { PARTS_OF_SPEECH, PRIMARY_DIVISIONS, normalizePartOfSpeechId, getWordsForPartOfSpeech, QURAN_PARTICLES } from './src/data/partsOfSpeech.ts';
 import type { RootSummary, RootDetail, DerivedFormSummary, MorphologicalSection, WordVariation, RootDerivation, SemanticDomain, GrammarCategorySummary, PartOfSpeechSummary, FluentQuranWord, FluentFrequencyStats } from './src/types.ts';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Safe directory resolution across both ESM (dev) and CJS bundle (production)
+const getAppDir = () => {
+  if (typeof __dirname !== 'undefined') {
+    return __dirname;
+  }
+  try {
+    if (typeof import.meta !== 'undefined' && (import.meta as any).url) {
+      return path.dirname(fileURLToPath((import.meta as any).url));
+    }
+  } catch {}
+  return process.cwd();
+};
+const appDir = getAppDir();
+
+function findDataFile(filename: string): string | null {
+  const possiblePaths = [
+    path.join(process.cwd(), 'src/data', filename),
+    path.join(appDir, 'src/data', filename),
+    path.join(appDir, '../src/data', filename),
+    path.join(appDir, filename),
+    path.join(process.cwd(), filename)
+  ];
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
 
 const PORT = 3000;
 const app = express();
@@ -26,17 +51,20 @@ const rootCache = new Map<string, RootDetail>();
 let fluentWordsList: FluentQuranWord[] = [];
 let fluentStatsData: FluentFrequencyStats | null = null;
 try {
-  const fwPath = path.join(__dirname, 'src/data/fluentArabicWords.json');
-  if (fs.existsSync(fwPath)) {
+  const fwPath = findDataFile('fluentArabicWords.json');
+  if (fwPath && fs.existsSync(fwPath)) {
     const rawWords = JSON.parse(fs.readFileSync(fwPath, 'utf-8'));
     fluentWordsList = rawWords.map((w: any, idx: number) => ({
       ...w,
       id: w.id || `fluent-word-${w.rank || idx + 1}`
     }));
-    console.log(`Loaded ${fluentWordsList.length} Fluent Arabic frequency words`);
+    console.log(`Loaded ${fluentWordsList.length} Fluent Arabic frequency words from ${fwPath}`);
+  } else {
+    console.warn('Could not locate fluentArabicWords.json in search paths');
   }
-  const fsPath = path.join(__dirname, 'src/data/fluentArabicStats.json');
-  if (fs.existsSync(fsPath)) {
+
+  const fsPath = findDataFile('fluentArabicStats.json');
+  if (fsPath && fs.existsSync(fsPath)) {
     fluentStatsData = JSON.parse(fs.readFileSync(fsPath, 'utf-8'));
     if (fluentStatsData && Array.isArray((fluentStatsData as any).semanticDomains)) {
       for (const domain of (fluentStatsData as any).semanticDomains) {
@@ -59,6 +87,9 @@ try {
         }
       }
     }
+    console.log(`Loaded Fluent Arabic stats from ${fsPath}`);
+  } else {
+    console.warn('Could not locate fluentArabicStats.json in search paths');
   }
 } catch (err) {
   console.error('Failed to load fluent Arabic data files:', err);
@@ -67,10 +98,13 @@ try {
 // Load all 1,664 roots list
 let allRootsList: RootSummary[] = [];
 try {
-  const rootsFilePath = path.join(__dirname, 'src/data/allRoots.json');
-  if (fs.existsSync(rootsFilePath)) {
+  const rootsFilePath = findDataFile('allRoots.json');
+  if (rootsFilePath && fs.existsSync(rootsFilePath)) {
     const rawData = fs.readFileSync(rootsFilePath, 'utf-8');
     allRootsList = JSON.parse(rawData);
+    console.log(`Loaded ${allRootsList.length} roots from ${rootsFilePath}`);
+  } else {
+    console.warn('Could not locate allRoots.json in search paths');
   }
 } catch (err) {
   console.error('Failed to load allRoots.json:', err);

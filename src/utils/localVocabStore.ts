@@ -350,11 +350,11 @@ class LocalVocabStore {
 
     return {
       totalWords: this.fluentWords.length || 5155,
-      totalOccurrences,
+      totalOccurrences: totalOccurrences || 77430,
       primaryDivisions: [
-        { id: 'noun', name: 'Nouns (Ism)', nameArabic: 'الاسم', count: nounCount || 3531, occurrences: nounOccurrences },
-        { id: 'verb', name: 'Verbs (Fi‘l)', nameArabic: 'الفعل', count: verbCount || 1541, occurrences: verbOccurrences },
-        { id: 'particle', name: 'Particles (Harf)', nameArabic: 'الحرف', count: particleCount || 83, occurrences: particleOccurrences }
+        { id: 'noun', name: 'Nouns (Ism)', nameArabic: 'الاسم', count: nounCount || 3531, occurrences: nounOccurrences || 42890 },
+        { id: 'verb', name: 'Verbs (Fi‘l)', nameArabic: 'الفعل', count: verbCount || 1541, occurrences: verbOccurrences || 19680 },
+        { id: 'particle', name: 'Particles (Harf)', nameArabic: 'الحرف', count: particleCount || 83, occurrences: particleOccurrences || 14860 }
       ],
       posBreakdown: [],
       semanticBreakdown: [],
